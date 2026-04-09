@@ -1,11 +1,11 @@
 import './globals.css'
 
 export const metadata = {
-  title: 'SoundPulse × Rumi Rafael',
-  description: 'Personalized trend intelligence and content strategy for Rumi Rafael — groovy, spacey indie pop/rock.',
+  title: 'SoundPulse — Your Weekly Marketing Strategist',
+  description: 'AI-powered trend intelligence and content strategy for independent artists.',
   openGraph: {
-    title: 'SoundPulse × Rumi Rafael',
-    description: 'Personalized trend intelligence and content strategy for Rumi Rafael — groovy, spacey indie pop/rock.',
+    title: 'SoundPulse — Your Weekly Marketing Strategist',
+    description: 'Know exactly what content to post, when to post it, and why — based on what\'s working in your genre right now.',
     type: 'website',
   },
 }
