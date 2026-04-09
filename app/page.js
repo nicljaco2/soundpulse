@@ -97,10 +97,14 @@ export default function Home() {
     setCalendar(prev => prev.map((item, idx) => idx === i ? { ...item, done: !item.done } : item))
   }
 
-  const handleWaitlist = (e) => {
+  const handleWaitlist = async (e) => {
     e.preventDefault()
     if (email.trim()) {
-      // In production, wire this to Formspree, Tally, or your own API
+      await fetch("https://formspree.io/f/xgopbngd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
       setSubmitted(true)
     }
   }
