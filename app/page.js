@@ -521,7 +521,21 @@ export default function Home() {
   const editProfile     = () => { setScreen("onboard"); setStep(1) }
   const toggleVibe      = (v) => setSelectedVibes(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v])
   const toggleCalendar  = (i) => setCalendarDone(prev => ({ ...prev, [i]: !prev[i] }))
-  const handleWaitlist  = (e) => { e.preventDefault(); if (email.trim()) setSubmitted(true) }
+  const handleWaitlist  = async (e) => {
+    e.preventDefault()
+    if (!email.trim()) return
+    try {
+      const res = await fetch('/api/waitlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      if (res.ok) setSubmitted(true)
+      else console.error('Waitlist error:', await res.json())
+    } catch (err) {
+      console.error('Waitlist fetch failed:', err)
+    }
+  }
 
   const Logo = () => (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
