@@ -108,6 +108,81 @@ function VideoCard({ video, genreMeta, expanded, onToggle }) {
   )
 }
 
+// ─── YouTube Trending Card ────────────────────────────────────────────────────
+
+function fmtCount(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M'
+  if (n >= 1_000)     return (n / 1_000).toFixed(0) + 'K'
+  return String(n)
+}
+
+function fmtDur(s) {
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return `${m}:${String(sec).padStart(2, '0')}`
+}
+
+function fmtAgo(iso) {
+  const d = Math.floor((Date.now() - new Date(iso)) / 86_400_000)
+  if (d === 0) return 'today'
+  if (d === 1) return 'yesterday'
+  if (d < 7)   return `${d}d ago`
+  if (d < 30)  return `${Math.floor(d / 7)}w ago`
+  if (d < 365) return `${Math.floor(d / 30)}mo ago`
+  return `${Math.floor(d / 365)}y ago`
+}
+
+function YouTubeTrendingCard({ video, accentColor }) {
+  return (
+    <a
+      href={video.videoUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{ display: "block", textDecoration: "none", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, overflow: "hidden", transition: "border-color 0.15s" }}
+      onMouseEnter={e => e.currentTarget.style.borderColor = `${accentColor}40`}
+      onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.07)"}
+    >
+      {/* Thumbnail */}
+      <div style={{ position: "relative" }}>
+        {video.thumbnail
+          ? <img src={video.thumbnail} alt={video.title} style={{ width: "100%", height: 180, objectFit: "cover", display: "block" }} />
+          : <div style={{ height: 180, background: `linear-gradient(135deg, ${accentColor}20 0%, rgba(10,10,15,0.9) 100%)` }} />
+        }
+        {/* Duration badge */}
+        {video.duration > 0 && (
+          <div style={{ position: "absolute", bottom: 8, right: 8, background: "rgba(0,0,0,0.8)", borderRadius: 4, padding: "2px 6px", fontSize: 11, fontWeight: 600, color: "#fff", letterSpacing: "0.02em" }}>{fmtDur(video.duration)}</div>
+        )}
+        {/* Play overlay */}
+        <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ width: 42, height: 42, borderRadius: 99, background: "rgba(0,0,0,0.6)", border: "1px solid rgba(255,255,255,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontSize: 14, color: "#fff", marginLeft: 3 }}>&#9654;</span>
+          </div>
+        </div>
+        {/* Shorts badge */}
+        {video.duration <= 60 && (
+          <div style={{ position: "absolute", top: 8, left: 8, background: "rgba(255,0,0,0.82)", borderRadius: 4, padding: "2px 7px", fontSize: 9, fontWeight: 700, color: "#fff", letterSpacing: "0.06em" }}>SHORT</div>
+        )}
+      </div>
+
+      {/* Info */}
+      <div style={{ padding: "11px 13px 13px" }}>
+        <div style={{ fontSize: 13, fontWeight: 500, color: "#E8E6E1", lineHeight: 1.4, marginBottom: 6, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{video.title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11, color: "#8B8680", maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{video.channel}</span>
+          <span style={{ fontSize: 10, color: "#3A3530" }}>·</span>
+          <span style={{ fontSize: 11, color: "#6B6560" }}>{fmtCount(video.viewCount)} views</span>
+          {video.likeCount > 0 && <>
+            <span style={{ fontSize: 10, color: "#3A3530" }}>·</span>
+            <span style={{ fontSize: 11, color: "#6B6560" }}>{fmtCount(video.likeCount)} likes</span>
+          </>}
+          <span style={{ fontSize: 10, color: "#3A3530" }}>·</span>
+          <span style={{ fontSize: 11, color: "#6B6560" }}>{fmtAgo(video.publishedAt)}</span>
+        </div>
+      </div>
+    </a>
+  )
+}
+
 // ─── Spotify Track Lookup ─────────────────────────────────────────────────────
 
 function SpotifyLookup({ genreMeta }) {
@@ -282,6 +357,9 @@ export default function Home() {
   // Spotify artist analysis
   const [artistAnalysis, setArtistAnalysis] = useState(null) // null | {loading} | {ok, ...} | {error}
 
+  // YouTube trending videos
+  const [ytTrending, setYtTrending] = useState(null) // null | {loading} | {ok, videos, fetchedAt} | {error}
+
   // Artist name dropdown search
   const [artistDropdown,  setArtistDropdown]  = useState([])   // search results
   const [dropdownOpen,    setDropdownOpen]    = useState(false)
@@ -363,6 +441,22 @@ export default function Home() {
     setDropdownOpen(false)
     setArtistDropdown([])
   }
+
+  // Fetch YouTube trending whenever genre changes (or dashboard opens)
+  useEffect(() => {
+    if (!selectedGenre || screen !== "dashboard") return
+    let cancelled = false
+    setYtTrending({ loading: true })
+    fetch(`/api/youtube/trending?genre=${encodeURIComponent(selectedGenre)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return
+        if (data.error) setYtTrending({ error: data.error })
+        else setYtTrending({ ok: true, videos: data.videos, fetchedAt: data.fetchedAt })
+      })
+      .catch(err => { if (!cancelled) setYtTrending({ error: err.message }) })
+    return () => { cancelled = true }
+  }, [selectedGenre, screen])
 
   const launchDashboard = () => { setScreen("dashboard"); setActiveTab("brief"); setExpandedSound(null); setExpandedIdea(null); setExpandedVideo(null) }
   const editProfile     = () => { setScreen("onboard"); setStep(1) }
@@ -812,23 +906,92 @@ export default function Home() {
     </div>
   )
 
+  const ytFetchedAgo = ytTrending?.fetchedAt
+    ? (() => {
+        const mins = Math.round((Date.now() - ytTrending.fetchedAt) / 60_000)
+        if (mins < 2)   return "just now"
+        if (mins < 60)  return `${mins}m ago`
+        return `${Math.floor(mins / 60)}h ago`
+      })()
+    : null
+
   const videosSection = (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-        <h3 style={{ fontSize: 12, fontWeight: 500, color: "#8B8680", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" }}>Trending videos — {selectedGenre}</h3>
-        <span style={{ fontSize: 11, color: "#6B6560" }}>Apr 10, 2026</span>
+      {/* ── Live YouTube Trending ── */}
+      <div style={{ marginBottom: 32 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ fontSize: 12, fontWeight: 500, color: "#8B8680", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" }}>Trending on YouTube — {selectedGenre}</h3>
+            {ytTrending?.ok && (
+              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#4B7C59", background: "rgba(29,185,84,0.08)", border: "1px solid rgba(29,185,84,0.15)", borderRadius: 99, padding: "1px 7px" }}>
+                <span style={{ width: 5, height: 5, borderRadius: 99, background: "#1DB954", display: "inline-block" }} />live
+              </span>
+            )}
+          </div>
+          {ytFetchedAgo && <span style={{ fontSize: 10, color: "#4B4540" }}>updated {ytFetchedAgo}</span>}
+        </div>
+        <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 16, lineHeight: 1.6 }}>
+          Short-form videos gaining traction in your genre right now. Refreshed every 6 hours.
+        </p>
+
+        {/* Loading */}
+        {ytTrending?.loading && (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+            {[1,2,3,4].map(i => (
+              <div key={i} style={{ borderRadius: 14, overflow: "hidden", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                <div style={{ height: 180, background: "rgba(255,255,255,0.03)", animation: "pulse 1.5s ease-in-out infinite" }} />
+                <div style={{ padding: "11px 13px 13px" }}>
+                  <div style={{ height: 12, borderRadius: 6, background: "rgba(255,255,255,0.05)", marginBottom: 8, width: "80%" }} />
+                  <div style={{ height: 10, borderRadius: 6, background: "rgba(255,255,255,0.04)", width: "55%" }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Error / not configured */}
+        {ytTrending?.error && (
+          <div style={{ background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 12, padding: "12px 16px", marginBottom: 8 }}>
+            <p style={{ margin: 0, fontSize: 12, color: "#FCA5A5", lineHeight: 1.5 }}>
+              {ytTrending.error.includes('not configured')
+                ? 'YouTube API key not set up yet — add YOUTUBE_API_KEY to .env.local to enable live trending.'
+                : `Couldn't load trending videos: ${ytTrending.error}`}
+            </p>
+          </div>
+        )}
+
+        {/* Results */}
+        {ytTrending?.ok && ytTrending.videos?.length > 0 && (
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+            {ytTrending.videos.map(video => (
+              <YouTubeTrendingCard key={video.id} video={video} accentColor={genreMeta.color} />
+            ))}
+          </div>
+        )}
+
+        {ytTrending?.ok && ytTrending.videos?.length === 0 && (
+          <p style={{ fontSize: 12, color: "#6B6560" }}>No recent shorts found for this genre — check back soon.</p>
+        )}
       </div>
-      <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 18, lineHeight: 1.6 }}>Real videos working in your genre right now. Tap <span style={{ color: genreMeta.color }}>Why this worked</span> under each one to see the breakdown.</p>
-      <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: isMobile ? undefined : "1fr 1fr", gap: isMobile ? undefined : 16 }}>
-        {videos.map(video => (
-          <VideoCard
-            key={video.id}
-            video={video}
-            genreMeta={genreMeta}
-            expanded={expandedVideo === video.id}
-            onToggle={() => setExpandedVideo(expandedVideo === video.id ? null : video.id)}
-          />
-        ))}
+
+      {/* ── Curated Deep Dives ── */}
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <h3 style={{ fontSize: 12, fontWeight: 500, color: "#8B8680", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" }}>Curated Deep Dives</h3>
+          <span style={{ fontSize: 10, color: "#4B4540", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 99, padding: "1px 7px" }}>Editor{"'"}s picks</span>
+        </div>
+        <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 16, lineHeight: 1.6 }}>Hand-picked examples with a breakdown of exactly why they worked — and how to steal the strategy.</p>
+        <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: isMobile ? undefined : "1fr 1fr", gap: isMobile ? undefined : 16 }}>
+          {videos.map(video => (
+            <VideoCard
+              key={video.id}
+              video={video}
+              genreMeta={genreMeta}
+              expanded={expandedVideo === video.id}
+              onToggle={() => setExpandedVideo(expandedVideo === video.id ? null : video.id)}
+            />
+          ))}
+        </div>
       </div>
     </div>
   )
