@@ -498,6 +498,156 @@ function VideoCard({ video, genreMeta, expanded, onToggle }) {
   )
 }
 
+// ─── Spotify Track Lookup ─────────────────────────────────────────────────────
+
+function SpotifyLookup({ genreMeta }) {
+  const [query,    setQuery]   = useState("")
+  const [results,  setResults] = useState([])
+  const [loading,  setLoading] = useState(false)
+  const [error,    setError]   = useState(null)
+  const [selected, setSelected] = useState(null)
+
+  const KEY_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B']
+
+  const search = async () => {
+    if (!query.trim()) return
+    setLoading(true); setError(null); setResults([]); setSelected(null)
+    try {
+      const res  = await fetch(`/api/spotify/search?q=${encodeURIComponent(query)}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Search failed')
+      setResults(data.tracks)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const Bar = ({ label, value, color }) => (
+    <div style={{ marginBottom: 9 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+        <span style={{ fontSize: 10, color: '#6B6560', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{label}</span>
+        <span style={{ fontSize: 10, fontFamily: "'Space Mono', monospace", color: '#A8A49E' }}>{value}%</span>
+      </div>
+      <div style={{ height: 4, borderRadius: 99, background: 'rgba(255,255,255,0.06)' }}>
+        <div style={{ height: '100%', borderRadius: 99, background: color, width: `${value}%`, transition: 'width 0.4s ease' }} />
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ marginTop: 28, borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 20 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+        <span style={{ width: 6, height: 6, borderRadius: 99, background: '#1DB954' }} />
+        <h3 style={{ fontSize: 12, fontWeight: 500, color: '#8B8680', margin: 0, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Spotify Track Lookup</h3>
+      </div>
+      <p style={{ fontSize: 12, color: '#6B6560', marginBottom: 14, lineHeight: 1.6 }}>Search any real track to see live BPM, energy, mood, and audio features from Spotify.</p>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+        <input
+          type="text"
+          value={query}
+          onChange={e => setQuery(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && search()}
+          placeholder="e.g. Blinding Lights The Weeknd"
+          style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, padding: '10px 13px', color: '#E8E6E1', fontSize: 13, fontFamily: 'inherit', outline: 'none', boxSizing: 'border-box' }}
+        />
+        <button
+          onClick={search}
+          disabled={loading || !query.trim()}
+          style={{ background: loading ? 'rgba(29,185,84,0.15)' : '#1DB954', border: 'none', borderRadius: 10, padding: '10px 16px', color: loading ? '#1DB954' : '#000', fontSize: 13, fontWeight: 600, fontFamily: 'inherit', cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.15s', whiteSpace: 'nowrap' }}
+        >
+          {loading ? '…' : 'Search'}
+        </button>
+      </div>
+
+      {error && (
+        <div style={{ background: 'rgba(248,113,113,0.08)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: 10, padding: '10px 13px', fontSize: 12, color: '#FCA5A5', marginBottom: 12 }}>
+          {error}
+        </div>
+      )}
+
+      {/* Result list */}
+      {results.length > 0 && !selected && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {results.map(track => (
+            <button
+              key={track.id}
+              onClick={() => setSelected(track)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%' }}
+            >
+              {track.albumArt && <img src={track.albumArt} alt={track.album} style={{ width: 40, height: 40, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: '#E8E6E1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.title}</div>
+                <div style={{ fontSize: 11, color: '#6B6560', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{track.artist}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                {track.bpm && <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, color: genreMeta.color }}>{track.bpm} BPM</div>}
+                <div style={{ fontSize: 10, color: '#6B6560' }}>Pop {track.popularity}</div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Expanded track detail */}
+      {selected && (
+        <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 14px 0' }}>
+            {selected.albumArt && <img src={selected.albumArt} alt={selected.album} style={{ width: 52, height: 52, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }} />}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#E8E6E1', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{selected.title}</div>
+              <div style={{ fontSize: 12, color: '#8B8680' }}>{selected.artist}</div>
+              <div style={{ fontSize: 11, color: '#6B6560' }}>{selected.album} · {selected.releaseDate?.slice(0, 4)}</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,0.05)', marginTop: 12 }}>
+            {[
+              { label: 'BPM',        value: selected.bpm ?? '—',       accent: genreMeta.color },
+              { label: 'Key',        value: selected.key != null ? `${KEY_NAMES[selected.key]} ${selected.mode ? 'maj' : 'min'}` : '—', accent: '#A8A49E' },
+              { label: 'Popularity', value: selected.popularity,        accent: '#FBBF24' },
+              { label: 'Mood',       value: selected.mood,              accent: '#F472B6' },
+            ].map(s => (
+              <div key={s.label} style={{ textAlign: 'center', padding: '8px 4px' }}>
+                <div style={{ fontSize: 9, color: '#6B6560', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 4 }}>{s.label}</div>
+                <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 12, fontWeight: 700, color: s.accent, overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ padding: '0 14px 14px' }}>
+            <Bar label="Energy"            value={selected.energy}       color="#F472B6" />
+            <Bar label="Danceability"       value={selected.danceability} color="#A78BFA" />
+            <Bar label="Valence (happiness)" value={selected.valence}     color="#4ADE80" />
+            <Bar label="Acousticness"       value={selected.acousticness} color="#60A5FA" />
+          </div>
+
+          <div style={{ display: 'flex', gap: 8, padding: '0 14px 14px' }}>
+            <a href={selected.spotifyUrl} target="_blank" rel="noopener noreferrer"
+              style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, background: 'rgba(29,185,84,0.1)', border: '1px solid rgba(29,185,84,0.25)', borderRadius: 8, padding: '9px', textDecoration: 'none', fontSize: 12, fontWeight: 500, color: '#1DB954' }}>
+              Open in Spotify &#8599;
+            </a>
+            {selected.previewUrl && (
+              <button
+                onClick={() => new Audio(selected.previewUrl).play()}
+                style={{ flex: 1, background: 'rgba(167,139,250,0.08)', border: '1px solid rgba(167,139,250,0.2)', borderRadius: 8, padding: '9px', fontSize: 12, fontWeight: 500, color: '#A78BFA', fontFamily: 'inherit', cursor: 'pointer' }}
+              >
+                ▶ Preview (30s)
+              </button>
+            )}
+            <button onClick={() => setSelected(null)}
+              style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 8, padding: '9px 12px', fontSize: 12, color: '#6B6560', fontFamily: 'inherit', cursor: 'pointer' }}>
+              ← Back
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Root page ────────────────────────────────────────────────────────────────
 
 export default function Home() {
@@ -839,6 +989,7 @@ export default function Home() {
                 </div>
               )
             })}
+            <SpotifyLookup genreMeta={genreMeta} />
           </div>
         )}
 
