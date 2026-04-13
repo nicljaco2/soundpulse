@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
 // ─── Genre config ─────────────────────────────────────────────────────────────
 
@@ -669,6 +669,35 @@ export default function Home() {
   const [email,            setEmail]            = useState("")
   const [submitted,        setSubmitted]        = useState(false)
 
+  // Spotify artist analysis
+  const [artistAnalysis, setArtistAnalysis] = useState(null) // null | {loading} | {ok, ...} | {error}
+
+  // Auto-analyze when a valid Spotify artist URL is pasted
+  useEffect(() => {
+    const isArtistUrl = /open\.spotify\.com\/artist\/[a-zA-Z0-9]+/.test(spotifyUrl)
+    if (!isArtistUrl) { setArtistAnalysis(null); return }
+
+    let cancelled = false
+    setArtistAnalysis({ loading: true })
+
+    fetch(`/api/spotify/artist?url=${encodeURIComponent(spotifyUrl)}`)
+      .then(r => r.json())
+      .then(data => {
+        if (cancelled) return
+        if (data.error) {
+          setArtistAnalysis({ error: data.error })
+        } else {
+          setArtistAnalysis({ ok: true, ...data })
+          if (!artistName.trim() && data.name) setArtistName(data.name)
+          if (data.detectedGenre)              setSelectedGenre(data.detectedGenre)
+          if (data.detectedVibes?.length)      setSelectedVibes(data.detectedVibes)
+        }
+      })
+      .catch(err => { if (!cancelled) setArtistAnalysis({ error: err.message }) })
+
+    return () => { cancelled = true }
+  }, [spotifyUrl])
+
   const launchDashboard = () => { setScreen("dashboard"); setActiveTab("brief"); setExpandedSound(null); setExpandedIdea(null); setExpandedVideo(null) }
   const editProfile     = () => { setScreen("onboard"); setStep(1) }
   const toggleVibe      = (v) => setSelectedVibes(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v])
@@ -721,9 +750,69 @@ export default function Home() {
             <h2 style={{ fontSize: 22, fontWeight: 600, color: "#E8E6E1", marginBottom: 8, lineHeight: 1.3 }}>What{"'"}s your artist name?</h2>
             <p style={{ fontSize: 13, color: "#8B8680", marginBottom: 28, lineHeight: 1.6 }}>We{"'"}ll use this to personalize your dashboard and content strategy.</p>
             <input type="text" placeholder="Your artist or project name" value={artistName} onChange={e => setArtistName(e.target.value)} onKeyDown={e => e.key === "Enter" && artistName.trim() && setStep(2)} autoFocus style={{ display: "block", width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "14px 16px", color: "#E8E6E1", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
-            <input type="url" placeholder="Spotify artist URL (optional)" value={spotifyUrl} onChange={e => setSpotifyUrl(e.target.value)} style={{ display: "block", width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "14px 16px", color: "#E8E6E1", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 8 }} />
-            <p style={{ fontSize: 11, color: "#4B4540", marginTop: 0, marginBottom: 32 }}>Spotify integration coming soon — enter your URL now and we{"'"}ll pull real stats when it{"'"}s ready.</p>
-            <button onClick={() => artistName.trim() && setStep(2)} disabled={!artistName.trim()} style={{ display: "block", width: "100%", background: artistName.trim() ? "#7C3AED" : "rgba(124,58,237,0.25)", border: "none", borderRadius: 12, padding: "15px", color: artistName.trim() ? "#fff" : "#6B6560", fontSize: 14, fontWeight: 500, fontFamily: "inherit", cursor: artistName.trim() ? "pointer" : "not-allowed", transition: "all 0.15s" }}>Continue</button>
+            <div style={{ position: "relative", marginBottom: 8 }}>
+              <input
+                type="url"
+                placeholder="Paste your Spotify artist URL to auto-detect genre + vibe"
+                value={spotifyUrl}
+                onChange={e => setSpotifyUrl(e.target.value)}
+                style={{ display: "block", width: "100%", background: artistAnalysis?.ok ? "rgba(29,185,84,0.06)" : "rgba(255,255,255,0.04)", border: `1px solid ${artistAnalysis?.ok ? "rgba(29,185,84,0.3)" : artistAnalysis?.error ? "rgba(248,113,113,0.3)" : "rgba(255,255,255,0.1)"}`, borderRadius: 12, padding: "14px 44px 14px 16px", color: "#E8E6E1", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
+              />
+              <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16 }}>
+                {artistAnalysis?.loading && <span style={{ color: "#6B6560", animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>}
+                {artistAnalysis?.ok      && <span style={{ color: "#1DB954" }}>✓</span>}
+                {artistAnalysis?.error   && <span style={{ color: "#F87171" }}>✗</span>}
+              </div>
+            </div>
+
+            {/* Analysis result card */}
+            {artistAnalysis?.ok && (
+              <div style={{ background: "rgba(29,185,84,0.06)", border: "1px solid rgba(29,185,84,0.2)", borderRadius: 12, padding: "14px 16px", marginBottom: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  {artistAnalysis.image && <img src={artistAnalysis.image} alt={artistAnalysis.name} style={{ width: 40, height: 40, borderRadius: 99, objectFit: "cover" }} />}
+                  <div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "#E8E6E1" }}>{artistAnalysis.name}</div>
+                    <div style={{ fontSize: 11, color: "#6B6560" }}>{artistAnalysis.followers?.toLocaleString()} followers · {artistAnalysis.popularity} popularity</div>
+                  </div>
+                </div>
+                {artistAnalysis.detectedGenre && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <span style={{ fontSize: 10, color: "#6B6560", textTransform: "uppercase", letterSpacing: "0.04em" }}>Detected genre</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#1DB954", background: "rgba(29,185,84,0.1)", padding: "2px 10px", borderRadius: 99 }}>{artistAnalysis.detectedGenre}</span>
+                  </div>
+                )}
+                {artistAnalysis.detectedVibes?.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                    {artistAnalysis.detectedVibes.map(v => (
+                      <span key={v} style={{ fontSize: 11, color: "#A78BFA", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", padding: "2px 8px", borderRadius: 99 }}>{v}</span>
+                    ))}
+                  </div>
+                )}
+                {!artistAnalysis.confident && (
+                  <p style={{ margin: "8px 0 0", fontSize: 11, color: "#6B6560", lineHeight: 1.5 }}>Limited track data — you can refine your genre and vibe on the next steps.</p>
+                )}
+              </div>
+            )}
+
+            {/* Analysis error — prompt manual flow */}
+            {artistAnalysis?.error && (
+              <div style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "12px 16px", marginBottom: 8 }}>
+                <p style={{ margin: 0, fontSize: 12, color: "#FCA5A5", lineHeight: 1.5 }}>Couldn{"'"}t analyze this profile — you{"'"}ll pick your genre and vibe manually on the next steps.</p>
+              </div>
+            )}
+
+            {!spotifyUrl && (
+              <p style={{ fontSize: 11, color: "#4B4540", marginTop: 4, marginBottom: 0 }}>Optional — we{"'"}ll detect your genre and vibe automatically from your Spotify profile.</p>
+            )}
+
+            <div style={{ height: 24 }} />
+            <button
+              onClick={() => artistName.trim() && setStep(2)}
+              disabled={!artistName.trim() || artistAnalysis?.loading}
+              style={{ display: "block", width: "100%", background: (artistName.trim() && !artistAnalysis?.loading) ? "#7C3AED" : "rgba(124,58,237,0.25)", border: "none", borderRadius: 12, padding: "15px", color: (artistName.trim() && !artistAnalysis?.loading) ? "#fff" : "#6B6560", fontSize: 14, fontWeight: 500, fontFamily: "inherit", cursor: (artistName.trim() && !artistAnalysis?.loading) ? "pointer" : "not-allowed", transition: "all 0.15s" }}
+            >
+              {artistAnalysis?.loading ? "Analyzing your music…" : "Continue"}
+            </button>
           </div>
         )}
 
@@ -731,7 +820,13 @@ export default function Home() {
         {step === 2 && (
           <div style={{ flex: 1 }}>
             <h2 style={{ fontSize: 22, fontWeight: 600, color: "#E8E6E1", marginBottom: 8, lineHeight: 1.3 }}>What{"'"}s your genre?</h2>
-            <p style={{ fontSize: 13, color: "#8B8680", marginBottom: 22, lineHeight: 1.6 }}>This determines which trending sounds and content ideas we surface for you.</p>
+            <p style={{ fontSize: 13, color: "#8B8680", marginBottom: artistAnalysis?.ok && artistAnalysis?.detectedGenre ? 10 : 22, lineHeight: 1.6 }}>This determines which trending sounds and content ideas we surface for you.</p>
+            {artistAnalysis?.ok && artistAnalysis?.detectedGenre && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 16, background: "rgba(29,185,84,0.06)", border: "1px solid rgba(29,185,84,0.18)", borderRadius: 10, padding: "8px 12px" }}>
+                <span style={{ fontSize: 14 }}>✦</span>
+                <span style={{ fontSize: 12, color: "#86EFAC" }}>Auto-detected from your Spotify — confirm or change below</span>
+              </div>
+            )}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 28 }}>
               {GENRE_OPTIONS.map(g => {
                 const meta = GENRE_META[g]; const active = selectedGenre === g
@@ -754,7 +849,13 @@ export default function Home() {
         {step === 3 && (
           <div style={{ flex: 1 }}>
             <h2 style={{ fontSize: 22, fontWeight: 600, color: "#E8E6E1", marginBottom: 8, lineHeight: 1.3 }}>Describe your sound</h2>
-            <p style={{ fontSize: 13, color: "#8B8680", marginBottom: 22, lineHeight: 1.6 }}>Pick any words that fit. These help tailor your strategy. You can skip this step.</p>
+            <p style={{ fontSize: 13, color: "#8B8680", marginBottom: artistAnalysis?.ok && artistAnalysis?.detectedVibes?.length ? 10 : 22, lineHeight: 1.6 }}>Pick any words that fit. These help tailor your strategy. You can skip this step.</p>
+            {artistAnalysis?.ok && artistAnalysis?.detectedVibes?.length > 0 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 16, background: "rgba(29,185,84,0.06)", border: "1px solid rgba(29,185,84,0.18)", borderRadius: 10, padding: "8px 12px" }}>
+                <span style={{ fontSize: 14 }}>✦</span>
+                <span style={{ fontSize: 12, color: "#86EFAC" }}>Vibes auto-detected from your Spotify — remove or add more below</span>
+              </div>
+            )}
             <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 32 }}>
               {VIBE_OPTIONS.map(v => {
                 const active = selectedVibes.includes(v)
