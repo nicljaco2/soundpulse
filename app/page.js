@@ -357,6 +357,9 @@ export default function Home() {
   // Spotify artist analysis
   const [artistAnalysis, setArtistAnalysis] = useState(null) // null | {loading} | {ok, ...} | {error}
 
+  // AI-generated personalised strategy
+  const [aiStrategy, setAiStrategy] = useState(null) // null | {loading} | {ok, sounds, ideas, calendar, alert} | {error}
+
   // YouTube trending videos
   const [ytTrending, setYtTrending] = useState(null) // null | {loading} | {ok, videos, fetchedAt} | {error}
 
@@ -373,10 +376,11 @@ export default function Home() {
   // Auto-analyze when a valid Spotify artist URL is pasted
   useEffect(() => {
     const isArtistUrl = /open\.spotify\.com\/artist\/[a-zA-Z0-9]+/.test(spotifyUrl)
-    if (!isArtistUrl) { setArtistAnalysis(null); return }
+    if (!isArtistUrl) { setArtistAnalysis(null); setAiStrategy(null); return }
 
     let cancelled = false
     setArtistAnalysis({ loading: true })
+    setAiStrategy(null)
 
     fetch(`/api/spotify/artist?url=${encodeURIComponent(spotifyUrl)}`)
       .then(r => r.json())
@@ -389,6 +393,21 @@ export default function Home() {
           if (!artistName.trim() && data.name) setArtistName(data.name)
           if (data.detectedGenre)              setSelectedGenre(data.detectedGenre)
           if (data.detectedVibes?.length)      setSelectedVibes(data.detectedVibes)
+
+          // Kick off AI strategy generation immediately after Spotify profile loads
+          setAiStrategy({ loading: true })
+          fetch('/api/ai/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+          })
+            .then(r => r.json())
+            .then(strategy => {
+              if (cancelled) return
+              if (strategy.error) setAiStrategy({ error: strategy.error })
+              else                setAiStrategy({ ok: true, ...strategy })
+            })
+            .catch(err => { if (!cancelled) setAiStrategy({ error: err.message }) })
         }
       })
       .catch(err => { if (!cancelled) setArtistAnalysis({ error: err.message }) })
@@ -692,11 +711,12 @@ export default function Home() {
   // DASHBOARD
   // ══════════════════════════════════════════════════════════════════════════
 
-  const sounds        = ALL_SOUNDS[selectedGenre]
-  const ideas         = ALL_IDEAS[selectedGenre]
+  // Use AI-generated content when ready, fall back to static data
+  const sounds        = aiStrategy?.ok ? aiStrategy.sounds        : ALL_SOUNDS[selectedGenre]
+  const ideas         = aiStrategy?.ok ? aiStrategy.ideas         : ALL_IDEAS[selectedGenre]
+  const alert         = aiStrategy?.ok ? aiStrategy.alert         : ALL_ALERTS[selectedGenre]
+  const calendarItems = aiStrategy?.ok ? aiStrategy.calendar      : ALL_CALENDARS[selectedGenre]
   const stats         = ALL_STATS[selectedGenre]
-  const alert         = ALL_ALERTS[selectedGenre]
-  const calendarItems = ALL_CALENDARS[selectedGenre]
   const videos        = ALL_VIDEOS[selectedGenre]
   const discTips      = DISCOVERY_TIPS[selectedGenre]
   const genreMeta     = GENRE_META[selectedGenre]
@@ -1143,6 +1163,19 @@ export default function Home() {
         {/* Main content area */}
         <main style={{ flex: 1, overflowY: "auto", height: "100vh" }}>
           <div style={{ maxWidth: 900, padding: "40px 48px" }}>
+            {/* AI personalisation status banner */}
+            {aiStrategy?.loading && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)", borderRadius: 12, padding: "10px 16px", marginBottom: 20 }}>
+                <span style={{ fontSize: 13, color: "#6B6560", animation: "spin 1.2s linear infinite", display: "inline-block", flexShrink: 0 }}>⟳</span>
+                <span style={{ fontSize: 12, color: "#A78BFA" }}>Analysing your sound and crafting a personalised strategy…</span>
+              </div>
+            )}
+            {aiStrategy?.ok && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.18)", borderRadius: 12, padding: "8px 14px", marginBottom: 20 }}>
+                <span style={{ fontSize: 12 }}>✦</span>
+                <span style={{ fontSize: 12, color: "#A78BFA" }}>Dashboard personalised for <strong style={{ color: "#E8E6E1" }}>{artistName}</strong> — sounds, ideas, and calendar generated from your Spotify profile</span>
+              </div>
+            )}
             {activeTab === "brief"    && briefSection}
             {activeTab === "sounds"   && soundsSection}
             {activeTab === "videos"   && videosSection}
@@ -1203,6 +1236,19 @@ export default function Home() {
 
       {/* ── Tab content ── */}
       <div style={{ padding: "20px 20px 40px" }}>
+        {/* AI personalisation status banner */}
+        {aiStrategy?.loading && (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(124,58,237,0.08)", border: "1px solid rgba(124,58,237,0.2)", borderRadius: 12, padding: "10px 14px", marginBottom: 16 }}>
+            <span style={{ fontSize: 13, color: "#6B6560", animation: "spin 1.2s linear infinite", display: "inline-block", flexShrink: 0 }}>⟳</span>
+            <span style={{ fontSize: 12, color: "#A78BFA" }}>Analysing your sound and crafting a personalised strategy…</span>
+          </div>
+        )}
+        {aiStrategy?.ok && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(124,58,237,0.06)", border: "1px solid rgba(124,58,237,0.18)", borderRadius: 12, padding: "8px 12px", marginBottom: 16 }}>
+            <span style={{ fontSize: 11 }}>✦</span>
+            <span style={{ fontSize: 11, color: "#A78BFA" }}>Personalised for <strong style={{ color: "#E8E6E1" }}>{artistName}</strong></span>
+          </div>
+        )}
         {activeTab === "brief"    && briefSection}
         {activeTab === "sounds"   && soundsSection}
         {activeTab === "videos"   && videosSection}
