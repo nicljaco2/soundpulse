@@ -361,7 +361,8 @@ export default function Home() {
   const [aiStrategy, setAiStrategy] = useState(null) // null | {loading} | {ok, sounds, ideas, calendar, alert} | {error}
 
   // YouTube trending videos
-  const [ytTrending, setYtTrending] = useState(null) // null | {loading} | {ok, videos, fetchedAt} | {error}
+  const [ytTrending,       setYtTrending]       = useState(null)       // null | {loading} | {ok, videos, fetchedAt} | {error}
+  const [selectedPlatform, setSelectedPlatform] = useState("youtube")  // "youtube" | "tiktok" | "instagram"
 
   // Artist name dropdown search
   const [artistDropdown,  setArtistDropdown]  = useState([])   // search results
@@ -467,21 +468,30 @@ export default function Home() {
     setArtistDropdown([])
   }
 
-  // Fetch YouTube trending whenever genre changes (or dashboard opens)
+  // Fetch YouTube trending whenever genre or AI region info changes
   useEffect(() => {
     if (!selectedGenre || screen !== "dashboard") return
     let cancelled = false
     setYtTrending({ loading: true })
-    fetch(`/api/youtube/trending?genre=${encodeURIComponent(selectedGenre)}`)
+
+    const region   = aiStrategy?.ok && aiStrategy.region   ? aiStrategy.region   : null
+    const language = aiStrategy?.ok && aiStrategy.language ? aiStrategy.language : null
+
+    const url = new URL('/api/youtube/trending', window.location.origin)
+    url.searchParams.set('genre', selectedGenre)
+    if (region)   url.searchParams.set('region',   region)
+    if (language) url.searchParams.set('language', language)
+
+    fetch(url.toString())
       .then(r => r.json())
       .then(data => {
         if (cancelled) return
         if (data.error) setYtTrending({ error: data.error })
-        else setYtTrending({ ok: true, videos: data.videos, fetchedAt: data.fetchedAt })
+        else setYtTrending({ ok: true, videos: data.videos, fetchedAt: data.fetchedAt, region: data.regionCode, language: data.language })
       })
       .catch(err => { if (!cancelled) setYtTrending({ error: err.message }) })
     return () => { cancelled = true }
-  }, [selectedGenre, screen])
+  }, [selectedGenre, screen, aiStrategy?.ok])
 
   const launchDashboard = () => { setScreen("dashboard"); setActiveTab("brief"); setExpandedSound(null); setExpandedIdea(null); setExpandedVideo(null) }
   const editProfile     = () => { setScreen("onboard"); setStep(1) }
@@ -975,84 +985,157 @@ export default function Home() {
       })()
     : null
 
+  const PLATFORMS = [
+    { id: "youtube",   label: "YouTube Shorts", color: "#FF0000", dot: "#FF4444" },
+    { id: "tiktok",    label: "TikTok",         color: "#69C9D0", dot: "#69C9D0" },
+    { id: "instagram", label: "Instagram Reels", color: "#E1306C", dot: "#E1306C" },
+  ]
+
   const videosSection = (
     <div>
-      {/* ── Live YouTube Trending ── */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <h3 style={{ fontSize: 12, fontWeight: 500, color: "#8B8680", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" }}>Trending on YouTube — {selectedGenre}</h3>
-            {ytTrending?.ok && (
-              <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#4B7C59", background: "rgba(29,185,84,0.08)", border: "1px solid rgba(29,185,84,0.15)", borderRadius: 99, padding: "1px 7px" }}>
-                <span style={{ width: 5, height: 5, borderRadius: 99, background: "#1DB954", display: "inline-block" }} />live
-              </span>
-            )}
-          </div>
-          {ytFetchedAgo && <span style={{ fontSize: 10, color: "#4B4540" }}>updated {ytFetchedAgo}</span>}
-        </div>
-        <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 16, lineHeight: 1.6 }}>
-          Short-form videos gaining traction in your genre right now. Refreshed every 6 hours.
-        </p>
+      {/* ── Platform picker ── */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 20, flexWrap: "wrap" }}>
+        {PLATFORMS.map(p => (
+          <button
+            key={p.id}
+            onClick={() => setSelectedPlatform(p.id)}
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: selectedPlatform === p.id ? `${p.dot}18` : "rgba(255,255,255,0.03)",
+              border: `1px solid ${selectedPlatform === p.id ? p.dot + "60" : "rgba(255,255,255,0.08)"}`,
+              borderRadius: 99, padding: "6px 14px",
+              color: selectedPlatform === p.id ? p.color : "#6B6560",
+              fontSize: 12, fontWeight: selectedPlatform === p.id ? 600 : 400,
+              fontFamily: "inherit", cursor: "pointer", transition: "all 0.15s",
+            }}
+          >
+            <span style={{ width: 6, height: 6, borderRadius: 99, background: selectedPlatform === p.id ? p.dot : "#3A3530", flexShrink: 0 }} />
+            {p.label}
+          </button>
+        ))}
+        {/* Region tag */}
+        {ytTrending?.region && selectedPlatform === "youtube" && (
+          <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#4B4540", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 99, padding: "4px 10px" }}>
+            {ytTrending.region}{ytTrending.language ? ` · ${ytTrending.language}` : ""}
+          </span>
+        )}
+      </div>
 
-        {/* Loading */}
-        {ytTrending?.loading && (
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
-            {[1,2,3,4].map(i => (
-              <div key={i} style={{ borderRadius: 14, overflow: "hidden", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
-                <div style={{ height: 180, background: "rgba(255,255,255,0.03)", animation: "pulse 1.5s ease-in-out infinite" }} />
-                <div style={{ padding: "11px 13px 13px" }}>
-                  <div style={{ height: 12, borderRadius: 6, background: "rgba(255,255,255,0.05)", marginBottom: 8, width: "80%" }} />
-                  <div style={{ height: 10, borderRadius: 6, background: "rgba(255,255,255,0.04)", width: "55%" }} />
+      {/* ── YouTube Shorts ── */}
+      {selectedPlatform === "youtube" && (
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h3 style={{ fontSize: 12, fontWeight: 500, color: "#8B8680", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                Trending Shorts — {selectedGenre}
+              </h3>
+              {ytTrending?.ok && (
+                <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#4B7C59", background: "rgba(29,185,84,0.08)", border: "1px solid rgba(29,185,84,0.15)", borderRadius: 99, padding: "1px 7px" }}>
+                  <span style={{ width: 5, height: 5, borderRadius: 99, background: "#1DB954", display: "inline-block" }} />live · last 14 days
+                </span>
+              )}
+            </div>
+            {ytFetchedAgo && <span style={{ fontSize: 10, color: "#4B4540" }}>updated {ytFetchedAgo}</span>}
+          </div>
+          <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 16, lineHeight: 1.6 }}>
+            Short-form videos posted in the last 14 days gaining the most traction in your genre{ytTrending?.region ? ` (${ytTrending.region})` : ""}.
+          </p>
+
+          {ytTrending?.loading && (
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
+              {[1,2,3,4].map(i => (
+                <div key={i} style={{ borderRadius: 14, overflow: "hidden", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                  <div style={{ height: 180, background: "rgba(255,255,255,0.03)", animation: "pulse 1.5s ease-in-out infinite" }} />
+                  <div style={{ padding: "11px 13px 13px" }}>
+                    <div style={{ height: 12, borderRadius: 6, background: "rgba(255,255,255,0.05)", marginBottom: 8, width: "80%" }} />
+                    <div style={{ height: 10, borderRadius: 6, background: "rgba(255,255,255,0.04)", width: "55%" }} />
+                  </div>
                 </div>
+              ))}
+            </div>
+          )}
+
+          {ytTrending?.error && (
+            <div style={{ background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 12, padding: "12px 16px" }}>
+              <p style={{ margin: 0, fontSize: 12, color: "#FCA5A5", lineHeight: 1.5 }}>
+                {ytTrending.error.includes('not configured')
+                  ? 'YouTube API key not set up yet — add YOUTUBE_API_KEY to .env.local to enable live trending.'
+                  : `Couldn't load trending videos: ${ytTrending.error}`}
+              </p>
+            </div>
+          )}
+
+          {ytTrending?.ok && ytTrending.videos?.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14, marginBottom: 32 }}>
+              {ytTrending.videos.map(video => (
+                <YouTubeTrendingCard key={video.id} video={video} accentColor={genreMeta.color} />
+              ))}
+            </div>
+          )}
+
+          {ytTrending?.ok && ytTrending.videos?.length === 0 && (
+            <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 32 }}>No shorts found in the last 14 days — the window is tight. Try checking back tomorrow.</p>
+          )}
+
+          {/* Curated Deep Dives */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <h3 style={{ fontSize: 12, fontWeight: 500, color: "#8B8680", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" }}>Curated Deep Dives</h3>
+              <span style={{ fontSize: 10, color: "#4B4540", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 99, padding: "1px 7px" }}>Editor{"'"}s picks</span>
+            </div>
+            <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 16, lineHeight: 1.6 }}>Hand-picked examples with a breakdown of exactly why they worked — and how to steal the strategy.</p>
+            <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: isMobile ? undefined : "1fr 1fr", gap: isMobile ? undefined : 16 }}>
+              {videos.map(video => (
+                <VideoCard
+                  key={video.id}
+                  video={video}
+                  genreMeta={genreMeta}
+                  expanded={expandedVideo === video.id}
+                  onToggle={() => setExpandedVideo(expandedVideo === video.id ? null : video.id)}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── TikTok placeholder ── */}
+      {selectedPlatform === "tiktok" && (
+        <div style={{ textAlign: "center", padding: "48px 24px" }}>
+          <div style={{ fontSize: 36, marginBottom: 16 }}>🎵</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#E8E6E1", marginBottom: 8 }}>TikTok coming soon</div>
+          <p style={{ fontSize: 13, color: "#6B6560", lineHeight: 1.7, maxWidth: 340, margin: "0 auto 20px" }}>
+            TikTok{"'"}s Research API requires an approved developer application and is restricted to academic/enterprise use. We{"'"}re evaluating third-party data partners to unlock this.
+          </p>
+          <div style={{ display: "inline-flex", flexDirection: "column", gap: 8, textAlign: "left", background: "rgba(105,201,208,0.06)", border: "1px solid rgba(105,201,208,0.15)", borderRadius: 12, padding: "14px 18px" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#69C9D0", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>What{"'"}s available today</div>
+            {["Trending sound suggestions (AI-generated, Sounds tab)", "Platform-specific content ideas in the Brief tab", "YouTube Shorts as a Reels-equivalent proxy"].map(item => (
+              <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: "#8B8680" }}>
+                <span style={{ color: "#69C9D0", flexShrink: 0 }}>✓</span>{item}
               </div>
             ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Error / not configured */}
-        {ytTrending?.error && (
-          <div style={{ background: "rgba(248,113,113,0.05)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 12, padding: "12px 16px", marginBottom: 8 }}>
-            <p style={{ margin: 0, fontSize: 12, color: "#FCA5A5", lineHeight: 1.5 }}>
-              {ytTrending.error.includes('not configured')
-                ? 'YouTube API key not set up yet — add YOUTUBE_API_KEY to .env.local to enable live trending.'
-                : `Couldn't load trending videos: ${ytTrending.error}`}
-            </p>
-          </div>
-        )}
-
-        {/* Results */}
-        {ytTrending?.ok && ytTrending.videos?.length > 0 && (
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 14 }}>
-            {ytTrending.videos.map(video => (
-              <YouTubeTrendingCard key={video.id} video={video} accentColor={genreMeta.color} />
+      {/* ── Instagram placeholder ── */}
+      {selectedPlatform === "instagram" && (
+        <div style={{ textAlign: "center", padding: "48px 24px" }}>
+          <div style={{ fontSize: 36, marginBottom: 16 }}>📸</div>
+          <div style={{ fontSize: 15, fontWeight: 600, color: "#E8E6E1", marginBottom: 8 }}>Instagram Reels coming soon</div>
+          <p style={{ fontSize: 13, color: "#6B6560", lineHeight: 1.7, maxWidth: 340, margin: "0 auto 20px" }}>
+            Meta{"'"}s Instagram Graph API only exposes content from accounts you manage — there{"'"}s no public endpoint for searching trending Reels. Unlocking this requires a paid third-party data provider.
+          </p>
+          <div style={{ display: "inline-flex", flexDirection: "column", gap: 8, textAlign: "left", background: "rgba(225,48,108,0.06)", border: "1px solid rgba(225,48,108,0.15)", borderRadius: 12, padding: "14px 18px" }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: "#E1306C", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 4 }}>Roadmap options</div>
+            {["RapidAPI Instagram scraper (~$30–50/mo)", "Apify Instagram actor (~$0.25 / 1,000 results)", "Chartmetric API (enterprise pricing)"].map(item => (
+              <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12, color: "#8B8680" }}>
+                <span style={{ color: "#E1306C", flexShrink: 0 }}>→</span>{item}
+              </div>
             ))}
           </div>
-        )}
-
-        {ytTrending?.ok && ytTrending.videos?.length === 0 && (
-          <p style={{ fontSize: 12, color: "#6B6560" }}>No recent shorts found for this genre — check back soon.</p>
-        )}
-      </div>
-
-      {/* ── Curated Deep Dives ── */}
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-          <h3 style={{ fontSize: 12, fontWeight: 500, color: "#8B8680", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" }}>Curated Deep Dives</h3>
-          <span style={{ fontSize: 10, color: "#4B4540", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 99, padding: "1px 7px" }}>Editor{"'"}s picks</span>
         </div>
-        <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 16, lineHeight: 1.6 }}>Hand-picked examples with a breakdown of exactly why they worked — and how to steal the strategy.</p>
-        <div style={{ display: isMobile ? "block" : "grid", gridTemplateColumns: isMobile ? undefined : "1fr 1fr", gap: isMobile ? undefined : 16 }}>
-          {videos.map(video => (
-            <VideoCard
-              key={video.id}
-              video={video}
-              genreMeta={genreMeta}
-              expanded={expandedVideo === video.id}
-              onToggle={() => setExpandedVideo(expandedVideo === video.id ? null : video.id)}
-            />
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   )
 
