@@ -1013,32 +1013,35 @@ export default function Home() {
             {p.label}
           </button>
         ))}
-        {/* Region tag */}
-        {ytTrending?.region && selectedPlatform === "youtube" && (
-          <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#4B4540", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 99, padding: "4px 10px" }}>
-            {ytTrending.region}{ytTrending.language ? ` · ${ytTrending.language}` : ""}
-          </span>
-        )}
       </div>
 
       {/* ── YouTube Shorts ── */}
       {selectedPlatform === "youtube" && (
         <div>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <h3 style={{ fontSize: 12, fontWeight: 500, color: "#8B8680", margin: 0, letterSpacing: "0.04em", textTransform: "uppercase" }}>
                 Trending Shorts — {selectedGenre}
               </h3>
               {ytTrending?.ok && (
                 <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 10, color: "#4B7C59", background: "rgba(29,185,84,0.08)", border: "1px solid rgba(29,185,84,0.15)", borderRadius: 99, padding: "1px 7px" }}>
-                  <span style={{ width: 5, height: 5, borderRadius: 99, background: "#1DB954", display: "inline-block" }} />live · last 14 days
+                  <span style={{ width: 5, height: 5, borderRadius: 99, background: "#1DB954", display: "inline-block" }} />live · last 30 days
                 </span>
               )}
+              {ytTrending?.region && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: "#A78BFA", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.25)", borderRadius: 99, padding: "2px 9px", letterSpacing: "0.04em" }}>
+                  {ytTrending.region}{ytTrending.language ? ` · ${ytTrending.language.toUpperCase()}` : ""}
+                </span>
+              )}
+              {aiStrategy?.ok && !ytTrending?.region && (
+                <span style={{ fontSize: 10, color: "#4B4540" }}>global</span>
+              )}
             </div>
-            {ytFetchedAgo && <span style={{ fontSize: 10, color: "#4B4540" }}>updated {ytFetchedAgo}</span>}
+            {ytFetchedAgo && <span style={{ fontSize: 10, color: "#4B4540", flexShrink: 0 }}>updated {ytFetchedAgo}</span>}
           </div>
           <p style={{ fontSize: 12, color: "#6B6560", marginBottom: 16, lineHeight: 1.6 }}>
-            Short-form videos posted in the last 14 days gaining the most traction in your genre{ytTrending?.region ? ` (${ytTrending.region})` : ""}.
+            Short-form videos posted in the last 30 days gaining the most traction in your genre
+            {ytTrending?.region ? ` — filtered to ${ytTrending.region}${ytTrending.language ? ` (${ytTrending.language})` : ""} based on your artist profile` : ""}.
           </p>
 
           {ytTrending?.loading && (
