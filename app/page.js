@@ -948,14 +948,40 @@ export default function Home() {
             {/* Stats */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 20 }}>
               {[
-                { label: "Monthly listeners", value: stats.monthlyListeners, change: stats.listenersChange },
-                { label: "Followers",          value: stats.followers,        change: stats.followersChange },
-                { label: "Playlist reach",     value: stats.playlistReach,    change: stats.playlistChange },
+                {
+                  label:  "Followers",
+                  value:  artistAnalysis?.followers != null
+                            ? artistAnalysis.followers >= 1_000_000
+                              ? (artistAnalysis.followers / 1_000_000).toFixed(1) + "M"
+                              : artistAnalysis.followers >= 1_000
+                              ? (artistAnalysis.followers / 1_000).toFixed(1) + "K"
+                              : String(artistAnalysis.followers)
+                            : stats.followers,
+                  change: artistAnalysis?.followers != null ? "Spotify" : stats.followersChange,
+                  live:   artistAnalysis?.followers != null,
+                },
+                {
+                  label:  "Popularity",
+                  value:  artistAnalysis?.popularity != null
+                            ? artistAnalysis.popularity + " / 100"
+                            : stats.monthlyListeners,
+                  change: artistAnalysis?.popularity != null ? "Spotify score" : stats.listenersChange,
+                  live:   artistAnalysis?.popularity != null,
+                },
+                {
+                  label:  "Playlist reach",
+                  value:  stats.playlistReach,
+                  change: stats.playlistChange,
+                  live:   false,
+                },
               ].map((s, i) => (
-                <div key={i} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, padding: "12px 10px" }}>
-                  <div style={{ fontSize: 10, color: "#6B6560", marginBottom: 4, letterSpacing: "0.03em" }}>{s.label}</div>
-                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 16, fontWeight: 700, color: "#E8E6E1" }}>{s.value}</div>
-                  <div style={{ fontSize: 10, color: "#4ADE80", marginTop: 3 }}>{s.change}</div>
+                <div key={i} style={{ background: "rgba(255,255,255,0.03)", border: `1px solid ${s.live ? "rgba(29,185,84,0.2)" : "rgba(255,255,255,0.06)"}`, borderRadius: 12, padding: "12px 10px" }}>
+                  <div style={{ fontSize: 10, color: "#6B6560", marginBottom: 4, letterSpacing: "0.03em", display: "flex", alignItems: "center", gap: 4 }}>
+                    {s.label}
+                    {s.live && <span style={{ width: 4, height: 4, borderRadius: 99, background: "#1DB954", display: "inline-block" }} />}
+                  </div>
+                  <div style={{ fontFamily: "'Space Mono', monospace", fontSize: 14, fontWeight: 700, color: "#E8E6E1" }}>{s.value}</div>
+                  <div style={{ fontSize: 10, color: s.live ? "#1DB954" : "#4ADE80", marginTop: 3 }}>{s.change}</div>
                 </div>
               ))}
             </div>
