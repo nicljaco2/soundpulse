@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import {
   GENRE_OPTIONS, GENRE_META, VIBE_OPTIONS,
   ALL_SOUNDS, ALL_IDEAS, ALL_CALENDARS, ALL_STATS, ALL_ALERTS, ALL_VIDEOS,
@@ -282,6 +282,13 @@ export default function Home() {
   // Spotify artist analysis
   const [artistAnalysis, setArtistAnalysis] = useState(null) // null | {loading} | {ok, ...} | {error}
 
+  // Artist name dropdown search
+  const [artistDropdown,  setArtistDropdown]  = useState([])   // search results
+  const [dropdownOpen,    setDropdownOpen]    = useState(false)
+  const [dropdownLoading, setDropdownLoading] = useState(false)
+  const artistInputRef = useRef(null)
+  const dropdownRef    = useRef(null)
+
   // Responsive
   const isMobile = useIsMobile()
 
@@ -310,6 +317,52 @@ export default function Home() {
 
     return () => { cancelled = true }
   }, [spotifyUrl])
+
+  // Debounced artist name search → dropdown
+  useEffect(() => {
+    const q = artistName.trim()
+    if (q.length < 2 || artistAnalysis?.ok) { setArtistDropdown([]); setDropdownOpen(false); return }
+
+    setDropdownLoading(true)
+    const timer = setTimeout(() => {
+      fetch(`/api/spotify/artists?q=${encodeURIComponent(q)}`)
+        .then(r => r.json())
+        .then(data => {
+          if (Array.isArray(data) && data.length > 0) {
+            setArtistDropdown(data)
+            setDropdownOpen(true)
+          } else {
+            setArtistDropdown([])
+            setDropdownOpen(false)
+          }
+        })
+        .catch(() => { setArtistDropdown([]); setDropdownOpen(false) })
+        .finally(() => setDropdownLoading(false))
+    }, 350)
+
+    return () => clearTimeout(timer)
+  }, [artistName, artistAnalysis?.ok])
+
+  // Close dropdown on click outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (
+        dropdownRef.current && !dropdownRef.current.contains(e.target) &&
+        artistInputRef.current && !artistInputRef.current.contains(e.target)
+      ) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const selectArtistFromDropdown = (artist) => {
+    setArtistName(artist.name)
+    setSpotifyUrl(artist.spotifyUrl) // triggers auto-analysis via existing useEffect
+    setDropdownOpen(false)
+    setArtistDropdown([])
+  }
 
   const launchDashboard = () => { setScreen("dashboard"); setActiveTab("brief"); setExpandedSound(null); setExpandedIdea(null); setExpandedVideo(null) }
   const editProfile     = () => { setScreen("onboard"); setStep(1) }
@@ -361,21 +414,80 @@ export default function Home() {
         {step === 1 && (
           <div style={{ flex: 1 }}>
             <h2 style={{ fontSize: 22, fontWeight: 600, color: "#E8E6E1", marginBottom: 8, lineHeight: 1.3 }}>What{"'"}s your artist name?</h2>
-            <p style={{ fontSize: 13, color: "#8B8680", marginBottom: 28, lineHeight: 1.6 }}>We{"'"}ll use this to personalize your dashboard and content strategy.</p>
-            <input type="text" placeholder="Your artist or project name" value={artistName} onChange={e => setArtistName(e.target.value)} onKeyDown={e => e.key === "Enter" && artistName.trim() && setStep(2)} autoFocus style={{ display: "block", width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "14px 16px", color: "#E8E6E1", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 10 }} />
-            <div style={{ position: "relative", marginBottom: 8 }}>
-              <input
-                type="url"
-                placeholder="Paste your Spotify artist URL to auto-detect genre + vibe"
-                value={spotifyUrl}
-                onChange={e => setSpotifyUrl(e.target.value)}
-                style={{ display: "block", width: "100%", background: artistAnalysis?.ok ? "rgba(29,185,84,0.06)" : "rgba(255,255,255,0.04)", border: `1px solid ${artistAnalysis?.ok ? "rgba(29,185,84,0.3)" : artistAnalysis?.error ? "rgba(248,113,113,0.3)" : "rgba(255,255,255,0.1)"}`, borderRadius: 12, padding: "14px 44px 14px 16px", color: "#E8E6E1", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}
-              />
-              <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16 }}>
-                {artistAnalysis?.loading && <span style={{ color: "#6B6560", animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>}
-                {artistAnalysis?.ok      && <span style={{ color: "#1DB954" }}>✓</span>}
-                {artistAnalysis?.error   && <span style={{ color: "#F87171" }}>✗</span>}
+            <p style={{ fontSize: 13, color: "#8B8680", marginBottom: 28, lineHeight: 1.6 }}>Start typing and select your Spotify profile — we{"'"}ll detect your genre and vibe automatically.</p>
+
+            {/* Artist name input + dropdown */}
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <div style={{ position: "relative" }}>
+                <input
+                  ref={artistInputRef}
+                  type="text"
+                  placeholder="Your artist or project name"
+                  value={artistName}
+                  autoFocus
+                  onChange={e => {
+                    setArtistName(e.target.value)
+                    // If user edits after selecting from dropdown, clear analysis
+                    if (artistAnalysis?.ok && e.target.value !== artistAnalysis.name) {
+                      setArtistAnalysis(null)
+                      setSpotifyUrl("")
+                    }
+                  }}
+                  onKeyDown={e => e.key === "Escape" && setDropdownOpen(false)}
+                  onFocus={() => artistDropdown.length > 0 && setDropdownOpen(true)}
+                  style={{ display: "block", width: "100%", background: artistAnalysis?.ok ? "rgba(29,185,84,0.06)" : "rgba(255,255,255,0.04)", border: `1px solid ${artistAnalysis?.ok ? "rgba(29,185,84,0.3)" : "rgba(255,255,255,0.1)"}`, borderRadius: dropdownOpen ? "12px 12px 0 0" : 12, padding: "14px 44px 14px 16px", color: "#E8E6E1", fontSize: 15, fontFamily: "inherit", outline: "none", boxSizing: "border-box", transition: "border-color 0.15s" }}
+                />
+                <div style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", fontSize: 16, pointerEvents: "none" }}>
+                  {artistAnalysis?.loading && <span style={{ color: "#6B6560", animation: "spin 1s linear infinite", display: "inline-block" }}>⟳</span>}
+                  {dropdownLoading && !artistAnalysis?.loading && <span style={{ color: "#6B6560", fontSize: 13 }}>⟳</span>}
+                  {artistAnalysis?.ok      && <span style={{ color: "#1DB954" }}>✓</span>}
+                  {artistAnalysis?.error   && <span style={{ color: "#F87171" }}>✗</span>}
+                </div>
               </div>
+
+              {/* Dropdown */}
+              {dropdownOpen && artistDropdown.length > 0 && (
+                <div
+                  ref={dropdownRef}
+                  style={{ position: "absolute", top: "100%", left: 0, right: 0, background: "#1A1A22", border: "1px solid rgba(255,255,255,0.12)", borderTop: "none", borderRadius: "0 0 12px 12px", overflow: "hidden", zIndex: 100, boxShadow: "0 12px 32px rgba(0,0,0,0.5)" }}
+                >
+                  {artistDropdown.map((artist, i) => (
+                    <button
+                      key={artist.id}
+                      onMouseDown={e => { e.preventDefault(); selectArtistFromDropdown(artist) }}
+                      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", background: "none", border: "none", borderTop: i > 0 ? "1px solid rgba(255,255,255,0.06)" : "none", padding: "10px 14px", cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                      onMouseLeave={e => e.currentTarget.style.background = "none"}
+                    >
+                      {artist.image
+                        ? <img src={artist.image} alt={artist.name} style={{ width: 36, height: 36, borderRadius: 99, objectFit: "cover", flexShrink: 0 }} />
+                        : <div style={{ width: 36, height: 36, borderRadius: 99, background: "rgba(255,255,255,0.08)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#6B6560" }}>{artist.name[0]}</div>
+                      }
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: "#E8E6E1", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{artist.name}</div>
+                        <div style={{ fontSize: 11, color: "#6B6560" }}>
+                          {artist.followers >= 1_000_000
+                            ? (artist.followers / 1_000_000).toFixed(1) + "M followers"
+                            : artist.followers >= 1_000
+                            ? (artist.followers / 1_000).toFixed(0) + "K followers"
+                            : artist.followers + " followers"}
+                          {artist.genres?.[0] && <span> · {artist.genres[0]}</span>}
+                        </div>
+                      </div>
+                      <div style={{ marginLeft: "auto", flexShrink: 0 }}>
+                        <span style={{ fontSize: 10, color: "#1DB954", background: "rgba(29,185,84,0.1)", padding: "2px 7px", borderRadius: 99, fontWeight: 500 }}>Select</span>
+                      </div>
+                    </button>
+                  ))}
+                  <div style={{ padding: "7px 14px", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 5 }}>
+                    <span style={{ fontSize: 10, color: "#4B4540" }}>Not you?</span>
+                    <button
+                      onMouseDown={e => { e.preventDefault(); setDropdownOpen(false); setArtistDropdown([]) }}
+                      style={{ fontSize: 10, color: "#7C3AED", background: "none", border: "none", padding: 0, cursor: "pointer", fontFamily: "inherit" }}
+                    >Continue without Spotify</button>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Analysis result card */}
@@ -407,15 +519,11 @@ export default function Home() {
               </div>
             )}
 
-            {/* Analysis error — prompt manual flow */}
+            {/* Analysis error */}
             {artistAnalysis?.error && (
               <div style={{ background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.2)", borderRadius: 12, padding: "12px 16px", marginBottom: 8 }}>
                 <p style={{ margin: 0, fontSize: 12, color: "#FCA5A5", lineHeight: 1.5 }}>Couldn{"'"}t analyze this profile — you{"'"}ll pick your genre and vibe manually on the next steps.</p>
               </div>
-            )}
-
-            {!spotifyUrl && (
-              <p style={{ fontSize: 11, color: "#4B4540", marginTop: 4, marginBottom: 0 }}>Optional — we{"'"}ll detect your genre and vibe automatically from your Spotify profile.</p>
             )}
 
             <div style={{ height: 24 }} />
