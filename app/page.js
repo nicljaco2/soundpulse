@@ -404,8 +404,14 @@ export default function Home() {
             .then(r => r.json())
             .then(strategy => {
               if (cancelled) return
-              if (strategy.error) setAiStrategy({ error: strategy.error })
-              else                setAiStrategy({ ok: true, ...strategy })
+              if (strategy.error) {
+                setAiStrategy({ error: strategy.error })
+              } else {
+                setAiStrategy({ ok: true, ...strategy })
+                // Claude is the authoritative genre classifier — override the regex result
+                if (strategy.genre) setSelectedGenre(strategy.genre)
+                if (strategy.vibes?.length) setSelectedVibes(strategy.vibes)
+              }
             })
             .catch(err => { if (!cancelled) setAiStrategy({ error: err.message }) })
         }
@@ -603,7 +609,7 @@ export default function Home() {
               )}
             </div>
 
-            {/* Analysis result card */}
+            {/* Spotify profile card */}
             {artistAnalysis?.ok && (
               <div style={{ background: "rgba(29,185,84,0.06)", border: "1px solid rgba(29,185,84,0.2)", borderRadius: 12, padding: "14px 16px", marginBottom: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
@@ -612,23 +618,52 @@ export default function Home() {
                     <div style={{ fontSize: 14, fontWeight: 600, color: "#E8E6E1" }}>{artistAnalysis.name}</div>
                     <div style={{ fontSize: 11, color: "#6B6560" }}>{artistAnalysis.followers?.toLocaleString()} followers · {artistAnalysis.popularity} popularity</div>
                   </div>
+                  {/* AI analysis in progress */}
+                  {aiStrategy?.loading && (
+                    <span style={{ marginLeft: "auto", fontSize: 11, color: "#A78BFA", display: "flex", alignItems: "center", gap: 5, flexShrink: 0 }}>
+                      <span style={{ animation: "spin 1.2s linear infinite", display: "inline-block" }}>⟳</span> Analysing sound…
+                    </span>
+                  )}
                 </div>
-                {artistAnalysis.detectedGenre && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    <span style={{ fontSize: 10, color: "#6B6560", textTransform: "uppercase", letterSpacing: "0.04em" }}>Detected genre</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#1DB954", background: "rgba(29,185,84,0.1)", padding: "2px 10px", borderRadius: 99 }}>{artistAnalysis.detectedGenre}</span>
+
+                {/* AI-confirmed genre + vibes */}
+                {(aiStrategy?.ok ? aiStrategy.genre : artistAnalysis.detectedGenre) && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 10, color: "#6B6560", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      {aiStrategy?.ok ? "AI-classified genre" : "Detected genre"}
+                    </span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: aiStrategy?.ok ? "#A78BFA" : "#1DB954", background: aiStrategy?.ok ? "rgba(167,139,250,0.1)" : "rgba(29,185,84,0.1)", padding: "2px 10px", borderRadius: 99 }}>
+                      {aiStrategy?.ok ? aiStrategy.genre : artistAnalysis.detectedGenre}
+                    </span>
                   </div>
                 )}
-                {artistAnalysis.detectedVibes?.length > 0 && (
+                {((aiStrategy?.ok ? aiStrategy.vibes : artistAnalysis.detectedVibes) ?? []).length > 0 && (
                   <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                    {artistAnalysis.detectedVibes.map(v => (
+                    {(aiStrategy?.ok ? aiStrategy.vibes : artistAnalysis.detectedVibes).map(v => (
                       <span key={v} style={{ fontSize: 11, color: "#A78BFA", background: "rgba(167,139,250,0.1)", border: "1px solid rgba(167,139,250,0.2)", padding: "2px 8px", borderRadius: 99 }}>{v}</span>
                     ))}
                   </div>
                 )}
-                {!artistAnalysis.confident && (
-                  <p style={{ margin: "8px 0 0", fontSize: 11, color: "#6B6560", lineHeight: 1.5 }}>Limited track data — you can refine your genre and vibe on the next steps.</p>
-                )}
+              </div>
+            )}
+
+            {/* AI ready — launch dashboard shortcut */}
+            {aiStrategy?.ok && aiStrategy.genre && (
+              <div style={{ marginBottom: 8 }}>
+                <button
+                  onClick={() => { setSelectedGenre(aiStrategy.genre); setSelectedVibes(aiStrategy.vibes ?? []); launchDashboard() }}
+                  style={{ display: "block", width: "100%", background: "linear-gradient(135deg, #7C3AED, #6D28D9)", border: "none", borderRadius: 12, padding: "15px", color: "#fff", fontSize: 14, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", transition: "opacity 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = "0.9"}
+                  onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                >
+                  Launch my dashboard ✦
+                </button>
+                <button
+                  onClick={() => setStep(2)}
+                  style={{ display: "block", width: "100%", background: "none", border: "none", padding: "10px", color: "#6B6560", fontSize: 12, fontFamily: "inherit", cursor: "pointer", marginTop: 4 }}
+                >
+                  Customise genre & vibes instead
+                </button>
               </div>
             )}
 
@@ -639,14 +674,19 @@ export default function Home() {
               </div>
             )}
 
-            <div style={{ height: 24 }} />
-            <button
-              onClick={() => artistName.trim() && setStep(2)}
-              disabled={!artistName.trim() || artistAnalysis?.loading}
-              style={{ display: "block", width: "100%", background: (artistName.trim() && !artistAnalysis?.loading) ? "#7C3AED" : "rgba(124,58,237,0.25)", border: "none", borderRadius: 12, padding: "15px", color: (artistName.trim() && !artistAnalysis?.loading) ? "#fff" : "#6B6560", fontSize: 14, fontWeight: 500, fontFamily: "inherit", cursor: (artistName.trim() && !artistAnalysis?.loading) ? "pointer" : "not-allowed", transition: "all 0.15s" }}
-            >
-              {artistAnalysis?.loading ? "Analyzing your music…" : "Continue"}
-            </button>
+            {/* Default continue button — shown when AI isn't ready or no Spotify profile */}
+            {!aiStrategy?.ok && (
+              <>
+                <div style={{ height: 24 }} />
+                <button
+                  onClick={() => artistName.trim() && setStep(2)}
+                  disabled={!artistName.trim() || artistAnalysis?.loading}
+                  style={{ display: "block", width: "100%", background: (artistName.trim() && !artistAnalysis?.loading) ? "#7C3AED" : "rgba(124,58,237,0.25)", border: "none", borderRadius: 12, padding: "15px", color: (artistName.trim() && !artistAnalysis?.loading) ? "#fff" : "#6B6560", fontSize: 14, fontWeight: 500, fontFamily: "inherit", cursor: (artistName.trim() && !artistAnalysis?.loading) ? "pointer" : "not-allowed", transition: "all 0.15s" }}
+                >
+                  {artistAnalysis?.loading ? "Analyzing your music…" : aiStrategy?.loading ? "Crafting your strategy…" : "Continue"}
+                </button>
+              </>
+            )}
           </div>
         )}
 
