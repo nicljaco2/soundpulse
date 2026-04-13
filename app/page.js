@@ -907,9 +907,13 @@ export default function Home() {
         {/* Artist card */}
         <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, padding: "14px 16px", marginBottom: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 99, background: `linear-gradient(135deg, ${genreMeta.color} 0%, #4C1D95 100%)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 15, fontWeight: 700, color: "#fff" }}>{initials}</span>
-            </div>
+            {artistAnalysis?.image ? (
+              <img src={artistAnalysis.image} alt={artistName} style={{ width: 44, height: 44, borderRadius: 99, objectFit: "cover", flexShrink: 0, border: `1px solid ${genreMeta.color}40` }} />
+            ) : (
+              <div style={{ width: 44, height: 44, borderRadius: 99, background: `linear-gradient(135deg, ${genreMeta.color} 0%, #4C1D95 100%)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <span style={{ fontFamily: "'Space Mono', monospace", fontSize: 15, fontWeight: 700, color: "#fff" }}>{initials}</span>
+              </div>
+            )}
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 600, color: "#E8E6E1", marginBottom: 5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{artistName}</div>
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
